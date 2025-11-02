@@ -1,0 +1,185 @@
+// Prisma Schema - SDD 기반 내규 퀴즈 데이터베이스 설계
+// 요구사항을 기반으로 스키마를 먼저 정의합니다
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ========================================
+// 사용자 관련 모델
+// ========================================
+
+// 부서
+model Department {
+  id        String   @id @default(uuid())
+  code      String   @unique // 부서코드
+  name      String   @unique // 부서명
+  order     Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users     User[]
+
+  @@map("departments")
+}
+
+// 사용자 (행원)
+model User {
+  id            String    @id @default(uuid())
+  employeeId    String    @unique // 행원번호
+  password      String    // 해시된 비밀번호
+  name          String    // 이름
+  departmentId  String    // 부서 ID
+  role          UserRole  @default(USER)
+  isActive      Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  department    Department @relation(fields: [departmentId], references: [id])
+
+  quizProgress  UserQuizProgress[]
+  quizSessions  QuizSession[]
+  answers       Answer[]
+
+  @@map("users")
+}
+
+// ========================================
+// 퀴즈 관련 모델
+// ========================================
+
+// 퀴즈 (예: 2025년 10월)
+model Quiz {
+  id            String    @id @default(uuid())
+  title         String    // "2025년 10월"
+  description   String?   // 퀴즈 설명
+  startDate     DateTime  // 유효기간 시작
+  endDate       DateTime  // 유효기간 종료
+  isActive      Boolean   @default(true)
+  maxRounds     Int       @default(3) // 최대 회차 (기본 3회차)
+  questionsPerRound Int   @default(5) // 회차당 문제 수 (기본 5개)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  questions     Question[]
+  userProgress  UserQuizProgress[]
+  sessions      QuizSession[]
+
+  @@map("quizzes")
+}
+
+// 문제
+model Question {
+  id            String        @id @default(uuid())
+  quizId        String
+  type          QuestionType  // 문제 유형
+  content       String        // 문제 내용
+  options       Json?         // 객관식 선택지 (배열)
+  correctAnswer Json          // 정답 (유형에 따라 다름)
+  explanation   String?       // 해설
+  isLuckyDraw   Boolean       @default(false) // LuckyDraw 문제 여부
+  order         Int           @default(0)
+  metadata      Json?         // 유형별 추가 데이터 (드래그앤드롭 위치 등)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  quiz          Quiz          @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  answers       Answer[]
+
+  @@map("questions")
+}
+
+// ========================================
+// 사용자 진행 상황 관련 모델
+// ========================================
+
+// 사용자별 퀴즈 진행 상황 (전체 진행률)
+model UserQuizProgress {
+  id                String    @id @default(uuid())
+  userId            String
+  quizId            String
+  currentRound      Int       @default(0) // 현재 회차 (0~3)
+  totalQuestionsAnswered Int  @default(0) // 총 풀은 문제 수
+  luckyDrawBadges   Int       @default(0) // LuckyDraw 뱃지 개수 (한번에 맞춘 수)
+  firstAttemptDate  DateTime? // 처음 푼 날짜
+  lastAttemptDate   DateTime? // 마지막 푼 날짜
+  isCompleted       Boolean   @default(false) // 3회차 모두 완료 여부
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  quiz              Quiz      @relation(fields: [quizId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, quizId])
+  @@map("user_quiz_progress")
+}
+
+// 퀴즈 세션 (1회차 = 5개 문제 세트)
+model QuizSession {
+  id                String        @id @default(uuid())
+  userId            String
+  quizId            String
+  roundNumber       Int           // 회차 번호 (1, 2, 3)
+  status            SessionStatus @default(IN_PROGRESS)
+  startedAt         DateTime      @default(now())
+  completedAt       DateTime?
+  questionsCount    Int           @default(0) // 이번 세션에서 푼 문제 수
+  correctFirstTry   Int           @default(0) // 한 번에 맞춘 문제 수 (LuckyDraw 출현 조건)
+  luckyDrawShown    Boolean       @default(false) // LuckyDraw 문제가 나왔는지
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  user              User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  quiz              Quiz          @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  answers           Answer[]
+
+  @@map("quiz_sessions")
+}
+
+// 사용자 답변 기록
+model Answer {
+  id                String      @id @default(uuid())
+  userId            String
+  sessionId         String
+  questionId        String
+  userAnswer        Json        // 사용자 답변 (유형에 따라 다름)
+  isCorrect         Boolean
+  attemptCount      Int         @default(1) // 시도 횟수
+  isFirstTryCorrect Boolean     @default(false) // 첫 시도에 맞췄는지
+  answeredAt        DateTime    @default(now())
+
+  user              User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  session           QuizSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  question          Question    @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@unique([sessionId, questionId]) // 세션당 문제는 1번만 응답
+  @@map("answers")
+}
+
+// ========================================
+// Enums
+// ========================================
+
+enum UserRole {
+  ADMIN  // 관리자
+  USER   // 일반 사용자
+}
+
+enum QuestionType {
+  DRAG_AND_DROP    // 1) 부서 드래그앤드롭
+  TYPE_SENTENCE    // 2) 문장 따라쓰기
+  FILL_BLANK       // 3) 빈칸 맞추기
+  OX_QUIZ          // 4) OX 문제
+  FIND_ERROR       // 5) 틀린 단어 찾기
+}
+
+enum SessionStatus {
+  IN_PROGRESS      // 진행 중
+  COMPLETED        // 완료
+  ABANDONED        // 중단 (그만하기)
+}

@@ -12,15 +12,32 @@ Thumbs.db
 venv/
 env/
 .env
+.env.local
+.env.*.local
 
-# Python caches (safe if you later use Python)
+# Python caches
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
 
-# Node (optional, safe if you later use Node)
+# Node.js
 node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
 *.log
+
+# Build output
+dist/
+build/
+
+# Database
+*.db
+*.sqlite
+
+# Prisma
+prisma/migrations/
+!prisma/migrations/.gitkeep
 
 
