@@ -1,0 +1,26 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# Editors/IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Environments
+venv/
+env/
+.env
+
+# Python caches (safe if you later use Python)
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Node (optional, safe if you later use Node)
+node_modules/
+*.log
+
+
